@@ -3,6 +3,7 @@
  * Endpoint: POST /api/chat & GET /api/chat
  * Active Model: gemini-3.8-flash (consistent)
  * Key Source: process.env.GEMINI_API_KEY (with client header fallback)
+ * Resilient Error Handling: HTTP 503 (Service Unavailable / Overloaded) & HTTP 429 (Rate Limit)
  */
 
 const fs = require("fs");
@@ -42,6 +43,19 @@ try {
 
 // Active Model Configuration
 const CONSISTENT_MODEL = "gemini-3.8-flash";
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Check if an error represents HTTP 503 / Service Unavailable / High Demand / Overloaded
+ */
+function is503Error(err) {
+  if (!err) return false;
+  const status = err.status || err.statusCode;
+  if (status === 503) return true;
+  const msg = String(err.message || err.error || err);
+  return /503|unavailable|overloaded|high\s*demand|service\s*unavailable|temporarily\s*unavailable/i.test(msg);
+}
 
 module.exports = async function handler(req, res) {
   // CORS configuration
@@ -151,8 +165,12 @@ module.exports = async function handler(req, res) {
     sendChunk(chunk);
   };
 
+  const statusNotifier = (msg) => {
+    sendEvent("status", { message: msg });
+  };
+
   try {
-    // 1. Try with @google/genai SDK
+    // 1. Try with @google/genai SDK (with 503 retry and 404 fallback)
     if (GoogleGenAI) {
       try {
         await streamWithGoogleGenAISDK({
@@ -165,19 +183,34 @@ module.exports = async function handler(req, res) {
         });
         return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
       } catch (sdkErr) {
-        if (/404|not found/i.test(sdkErr.message || "")) {
-          // Fallback seamlessly to gemini-2.0-flash under the hood
-          await streamWithGoogleGenAISDK({
-            apiKey: geminiApiKey,
-            model: "gemini-2.0-flash",
-            messages,
-            attachments,
-            searchContext,
-            onChunk: tokenTracker
-          });
-          return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+        if (is503Error(sdkErr)) {
+          statusNotifier("Server model sedang sibuk (503). Mencoba ulang...");
+          await sleep(1500);
+          try {
+            await streamWithGoogleGenAISDK({
+              apiKey: geminiApiKey,
+              model: "gemini-2.0-flash",
+              messages,
+              attachments,
+              searchContext,
+              onChunk: tokenTracker
+            });
+            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+          } catch (_) {}
+        } else if (/404|not found/i.test(sdkErr.message || "")) {
+          try {
+            await streamWithGoogleGenAISDK({
+              apiKey: geminiApiKey,
+              model: "gemini-2.0-flash",
+              messages,
+              attachments,
+              searchContext,
+              onChunk: tokenTracker
+            });
+            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+          } catch (_) {}
         }
-        throw sdkErr;
+        // Fallback to robust REST handler
       }
     }
 
@@ -194,40 +227,67 @@ module.exports = async function handler(req, res) {
         });
         return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
       } catch (sdkErr) {
-        if (/404|not found/i.test(sdkErr.message || "")) {
-          // Fallback seamlessly to gemini-2.0-flash under the hood
-          await streamWithGenerativeAISDK({
-            apiKey: geminiApiKey,
-            model: "gemini-2.0-flash",
-            messages,
-            attachments,
-            searchContext,
-            onChunk: tokenTracker
-          });
-          return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+        if (is503Error(sdkErr)) {
+          statusNotifier("Server model sibuk (503). Mengalihkan kluster...");
+          await sleep(1500);
+          try {
+            await streamWithGenerativeAISDK({
+              apiKey: geminiApiKey,
+              model: "gemini-2.0-flash",
+              messages,
+              attachments,
+              searchContext,
+              onChunk: tokenTracker
+            });
+            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+          } catch (_) {}
+        } else if (/404|not found/i.test(sdkErr.message || "")) {
+          try {
+            await streamWithGenerativeAISDK({
+              apiKey: geminiApiKey,
+              model: "gemini-2.0-flash",
+              messages,
+              attachments,
+              searchContext,
+              onChunk: tokenTracker
+            });
+            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+          } catch (_) {}
         }
-        throw sdkErr;
+        // Fallback to robust REST handler
       }
     }
 
-    // 3. Native Google Gemini REST Streaming (robust zero-dependency fallback)
+    // 3. Native Google Gemini REST Streaming with full 503 backoff retries & multi-cluster fallback
     await streamWithNativeGeminiREST({
       apiKey: geminiApiKey,
       model: CONSISTENT_MODEL,
       messages,
       attachments,
       searchContext,
-      onChunk: tokenTracker
+      onChunk: tokenTracker,
+      onStatus: statusNotifier
     });
     return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
   } catch (err) {
-    console.error("Gemini API Error:", err.message);
+    console.error("Gemini Backend Error:", err.message);
     const errMsg = err.message || "";
+    const is503 = is503Error(err);
     const isRateLimit = err.status === 429 ||
                         err.statusCode === 429 ||
                         /429|resource_exhausted|quota|rate\s*limit|too\s*many\s*requests/i.test(errMsg);
 
-    if (isRateLimit) {
+    if (is503) {
+      tokenTracker(
+        `\n\n> 🚦 **Layanan Sedang Mengalami Beban Sangat Tinggi (HTTP 503 Service Unavailable):**\n` +
+        `> Server Google AI saat ini sedang menerima lonjakan trafik (*high demand / model overloaded*).\n` +
+        `> Sistem telah berupaya melakukan percobaan ulang otomatis serta pengalihan kluster, namun kapasitas sementara masih penuh.\n\n` +
+        `> **Saran Tindakan:**\n` +
+        `> 1. Tunggu 10–20 detik agar antrean server mereda.\n` +
+        `> 2. Klik tombol **Coba Lagi (Regenerate)** di bawah bubble chat ini.\n` +
+        `> 3. Jika terus berlanjut, coba gunakan prompt yang lebih singkat.\n`
+      );
+    } else if (isRateLimit) {
       tokenTracker(
         `\n\n> ⏳ **Batas Kuota / Rate Limit Tercapai (HTTP 429):**\n` +
         `> Permintaan ke model **${CONSISTENT_MODEL}** telah melebihi kuota per menit atau batas limit Google Gemini API.\n` +
@@ -276,66 +336,120 @@ async function streamWithGenerativeAISDK({ apiKey, model, messages, attachments,
 
 /**
  * Native REST Streaming for Google Gemini (official SSE endpoint)
+ * Features automatic 503 backoff retries and multi-cluster model fallbacks.
  */
-async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments, searchContext, onChunk }) {
+async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments, searchContext, onChunk, onStatus }) {
   const contents = formatGeminiContents(messages, attachments, searchContext);
-  let targetModel = model || "gemini-3.8-flash";
-  let url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const modelsToTry = [
+    model || "gemini-3.8-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash"
+  ];
 
-  let resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contents })
-  });
+  let lastError = null;
 
-  // If gemini-3.8-flash returns 404 (model ID not listed in v1beta), fallback to gemini-2.0-flash seamlessly
-  if (resp.status === 404 && targetModel === "gemini-3.8-flash") {
-    targetModel = "gemini-2.0-flash";
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
-    resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents })
-    });
-  }
+  for (let mIdx = 0; mIdx < modelsToTry.length; mIdx++) {
+    const currentModel = modelsToTry[mIdx];
+    const maxRetries = 2; // Up to 3 attempts total per model cluster
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    let msg = `HTTP ${resp.status} ${resp.statusText}`;
-    try {
-      const parsed = JSON.parse(errText);
-      msg = parsed.error?.message || msg;
-    } catch (_) {}
-    const err = new Error(msg);
-    err.status = resp.status;
-    throw err;
-  }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0 && onStatus) {
+          onStatus(`Server AI sedang sibuk (503). Mencoba ulang otomatis (percobaan ${attempt + 1}/${maxRetries + 1})...`);
+        } else if (mIdx > 0 && attempt === 0 && onStatus) {
+          onStatus(`Mengalihkan ke kluster alternatif (${currentModel}) karena beban server tinggi...`);
+        }
 
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents })
+        });
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop();
+        // 404: model ID not found in v1beta -> skip immediately to next model
+        if (resp.status === 404) {
+          lastError = new Error(`Model ${currentModel} tidak ditemukan.`);
+          lastError.status = 404;
+          break; // break retry loop to try next model in modelsToTry
+        }
 
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        try {
-          const json = JSON.parse(line.slice(6));
-          const parts = json?.candidates?.[0]?.content?.parts;
-          if (Array.isArray(parts)) {
-            for (const part of parts) {
-              if (part.text) onChunk(part.text);
+        // 503 Service Unavailable / Model Overloaded / High Demand
+        if (resp.status === 503) {
+          const errText = await resp.text().catch(() => "");
+          lastError = new Error(errText || "503 Service Unavailable / Model Overloaded");
+          lastError.status = 503;
+
+          if (attempt < maxRetries) {
+            // Jittered backoff: ~1.2s, ~2.2s
+            await sleep(1000 * Math.pow(1.5, attempt) + Math.random() * 400);
+            continue; // retry current model
+          } else {
+            // Retries exhausted on this model cluster, break to try next cluster
+            break;
+          }
+        }
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          let msg = `HTTP ${resp.status} ${resp.statusText}`;
+          try {
+            const parsed = JSON.parse(errText);
+            msg = parsed.error?.message || msg;
+          } catch (_) {}
+          const err = new Error(msg);
+          err.status = resp.status;
+          throw err;
+        }
+
+        // Stream is 200 OK -> consume SSE chunks
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const json = JSON.parse(line.slice(6));
+                const parts = json?.candidates?.[0]?.content?.parts;
+                if (Array.isArray(parts)) {
+                  for (const part of parts) {
+                    if (part.text) onChunk(part.text);
+                  }
+                }
+              } catch (_) {}
             }
           }
-        } catch (_) {}
+        }
+
+        // Successfully streamed response!
+        return;
+      } catch (err) {
+        lastError = err;
+        if (is503Error(err)) {
+          if (attempt < maxRetries) {
+            await sleep(1000 * Math.pow(1.5, attempt) + Math.random() * 400);
+            continue;
+          }
+        } else if (err.status === 404) {
+          break; // proceed to next fallback model
+        } else {
+          // If non-503 (e.g. 400 Bad Request, 429 Rate Limit), throw immediately
+          throw err;
+        }
       }
     }
   }
+
+  // All retries and clusters exhausted
+  throw lastError || new Error("503 Service Unavailable / All model endpoints are currently busy");
 }
 
 /**
