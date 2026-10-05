@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#343541" />
+  <title>ChatAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" aria-label="Riwayat percakapan">
+      <div class="sidebar-top">
+        <button class="icon-btn" id="closeSidebar" title="Tutup sidebar" aria-label="Tutup sidebar">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
+        <button class="icon-btn" id="newChatTop" title="Chat baru" aria-label="Chat baru">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+
+      <button class="new-chat" id="newChat">
+        <span class="logo-dot">
+          <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
+        </span>
+        <span>Chat baru</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="searchChats" type="text" placeholder="Cari percakapan..." />
+      </div>
+
+      <nav class="history" id="history"></nav>
+
+      <div class="sidebar-bottom">
+        <button class="upgrade">
+          <span class="upgrade-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5L12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>
+          </span>
+          <span class="upgrade-text"><strong>Upgrade ke Plus</strong><small>Akses model terbaik & fitur lain</small></span>
+        </button>
+        <div class="profile" id="profile">
+          <div class="avatar">U</div>
+          <div class="profile-info"><strong>Pengguna</strong><small>Gratis</small></div>
+          <button class="icon-btn small" id="themeToggle" title="Ganti tema" aria-label="Ganti tema">
+            <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn" id="openSidebar" title="Buka menu" aria-label="Buka menu">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <button class="icon-btn mobile-only" id="newChatMobile" title="Chat baru" aria-label="Chat baru">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <div class="model-picker">
+            <button class="model-btn" id="modelBtn" aria-haspopup="listbox">
+              <span id="modelName">ChatAI 4o</span>
+              <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="model-menu" id="modelMenu" role="listbox">
+              <button class="model-item active" data-model="ChatAI 4o">
+                <div><strong>ChatAI 4o</strong><small>Cocok untuk sebagian besar tugas</small></div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <button class="model-item" data-model="ChatAI o3">
+                <div><strong>ChatAI o3</strong><small>Penalaran tingkat lanjut</small></div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <button class="model-item" data-model="ChatAI mini">
+                <div><strong>ChatAI mini</strong><small>Lebih cepat untuk tugas harian</small></div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="share-btn" id="shareBtn">
+            <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg>
+            <span>Bagikan</span>
+          </button>
+          <div class="avatar sm desktop-only">U</div>
+        </div>
+      </header>
+
+      <section class="chat" id="chat">
+        <!-- Empty state -->
+        <div class="welcome" id="welcome">
+          <div class="welcome-logo">
+            <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/></svg>
+          </div>
+          <h1 class="welcome-title">Apa yang bisa saya bantu?</h1>
+          <div class="suggestions" id="suggestions">
+            <button class="suggestion" data-prompt="Buatkan rencana belajar JavaScript selama 30 hari">
+              <span class="s-icon" style="--c:#76d0eb">
+                <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+              </span>
+              <span>Rencana belajar</span>
+            </button>
+            <button class="suggestion" data-prompt="Tuliskan contoh kode Python untuk membaca file CSV">
+              <span class="s-icon" style="--c:#cb8bd0">
+                <svg viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+              </span>
+              <span>Tulis kode</span>
+            </button>
+            <button class="suggestion" data-prompt="Berikan ide nama untuk kedai kopi modern">
+              <span class="s-icon" style="--c:#e2c541">
+                <svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
+              </span>
+              <span>Brainstorm ide</span>
+            </button>
+            <button class="suggestion" data-prompt="Jelaskan apa itu kecerdasan buatan dengan bahasa sederhana">
+              <span class="s-icon" style="--c:#ea8444">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </span>
+              <span>Jelaskan sesuatu</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="messages" id="messages"></div>
+      </section>
+
+      <button class="scroll-down" id="scrollDown" aria-label="Gulir ke bawah">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+      </button>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="composer">
+          <div class="attachments" id="attachments"></div>
+          <textarea id="input" rows="1" placeholder="Tanyakan apa saja" aria-label="Pesan"></textarea>
+          <div class="composer-actions">
+            <div class="left-actions">
+              <label class="icon-btn round" title="Lampirkan file" aria-label="Lampirkan file">
+                <input type="file" id="fileInput" multiple hidden />
+                <svg viewBox="0 0 24 24"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+              </label>
+              <button type="button" class="tool-chip" id="searchTool">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+                <span>Cari</span>
+              </button>
+              <button type="button" class="tool-chip" id="thinkTool">
+                <svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg>
+                <span>Nalar</span>
+              </button>
+            </div>
+            <div class="right-actions">
+              <button type="button" class="icon-btn round" id="micBtn" title="Dikte suara">
+                <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg>
+              </button>
+              <button type="submit" class="send-btn" id="sendBtn" title="Kirim" aria-label="Kirim" disabled>
+                <svg class="arrow" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                <svg class="stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </form>
+        <p class="disclaimer">ChatAI dapat membuat kesalahan. Periksa info penting.</p>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="script.js"></script>
+</body>
+</html>
