@@ -1,0 +1,16 @@
+{
+  "name": "project-ai",
+  "version": "1.0.0",
+  "description": "Full-Stack ChatGPT UI Clone with Google GenAI SDK and Vercel Serverless Backend",
+  "main": "api/chat.js",
+  "scripts": {
+    "start": "node api/chat.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.27.0",
+    "@google/generative-ai": "^0.24.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

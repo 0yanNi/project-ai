@@ -808,38 +808,30 @@
         }
       } else if (!res.ok) {
         const errText = await res.text();
-        console.warn(`Fetch returned HTTP ${res.status}:`, errText);
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const errObj = JSON.parse(errText);
+          errMsg = errObj.error?.message || errObj.error || errMsg;
+        } catch (_) {
+          errMsg = errText || errMsg;
+        }
+        out = `> ⚠️ **Gagal Terhubung ke Backend AI (${res.status}):**\n> ${errMsg}\n\n*Pastikan GEMINI_API_KEY telah diatur di Vercel atau menu pengaturan.*`;
+        reply.content = out;
+        md.innerHTML = renderMarkdown(out);
       }
     } catch (err) {
       if (err.name === "AbortError") {
         stopRequested = true;
       } else {
-        console.warn("Serverless stream notice:", err.message);
+        out = `> ⚠️ **Kesalahan Koneksi:** Tidak dapat menjangkau server backend (\`/api/chat\`).\n> Detail: *${err.message}*\n\n*Jika menggunakan Vercel, pastikan deployment selesai dan GEMINI_API_KEY telah disetel.*`;
+        reply.content = out;
+        md.innerHTML = renderMarkdown(out);
       }
     } finally {
       currentAbortController = null;
     }
 
-    // Fallback typewriter engine if offline or serverless unavailable
-    if (!streamSuccess && !stopRequested && state.currentId === chatId) {
-      await sleep(thinkLabel ? 1200 : 600);
-      const full = mockResponse(last.content);
-      let pos = 0;
-      while (pos < full.length) {
-        if (stopRequested || state.currentId !== chatId) break;
-        const step = 2 + Math.floor(Math.random() * 3);
-        pos = Math.min(full.length, pos + step);
-        out = full.slice(0, pos);
-        reply.content = out;
-        md.innerHTML = renderMarkdown(out);
-        if (autoScroll) chatEl.scrollTop = chatEl.scrollHeight;
-        const ch = full[pos - 1];
-        await sleep(/[.!?\n]/.test(ch) ? 50 : 12 + Math.random() * 12);
-      }
-      updateUsageWidget(Math.floor(out.length / 4));
-    }
-
-    reply.content = out || (stopRequested ? "_(Dihentikan)_" : "Tidak ada respons.");
+    reply.content = out || (stopRequested ? "_(Dihentikan)_" : "> ⚠️ Tidak ada respons dari server.");
     chat.updated = Date.now();
     save();
     setGenerating(false);
@@ -851,123 +843,6 @@
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  // ---------- Mock AI ----------
-  function mockResponse(q) {
-    const t = q.toLowerCase();
-    if (/(kode|code|python|javascript|program|fungsi|script|csv)/.test(t)) {
-      return `Tentu! Berikut contoh kode **Python** untuk membaca file CSV menggunakan modul bawaan \`csv\` dan juga dengan \`pandas\`.
-
-### 1. Menggunakan modul \`csv\`
-
-\`\`\`python
-import csv
-
-def baca_csv(path):
-    # Membuka file dan membaca setiap baris sebagai dictionary
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            print(row["nama"], row["umur"])
-
-baca_csv("data.csv")
-\`\`\`
-
-### 2. Menggunakan \`pandas\`
-
-\`\`\`python
-import pandas as pd
-
-df = pd.read_csv("data.csv")
-print(df.head(5))       # 5 baris pertama
-print(df.describe())    # ringkasan statistik
-\`\`\`
-
-| Metode | Kelebihan | Cocok untuk |
-|---|---|---|
-| \`csv\` | Tanpa dependensi | File kecil & sederhana |
-| \`pandas\` | Analisis data kuat | Dataset besar & olah data |
-
-> **Tips:** gunakan \`encoding="utf-8"\` agar karakter khusus terbaca dengan benar.
-
-Mau saya bantu menambahkan fitur filter atau ekspor ke Excel?`;
-    }
-    if (/(rencana|belajar|jadwal|plan|roadmap)/.test(t)) {
-      return `Berikut **rencana belajar JavaScript 30 hari** yang terstruktur:
-
-## Minggu 1 — Dasar-dasar
-1. Variabel (\`let\`, \`const\`) & tipe data
-2. Operator dan percabangan (\`if\`, \`switch\`)
-3. Perulangan (\`for\`, \`while\`)
-4. Fungsi & arrow function
-
-## Minggu 2 — Struktur Data
-- Array & method penting: \`map\`, \`filter\`, \`reduce\`
-- Object, destructuring, spread operator
-- String manipulation
-
-## Minggu 3 — DOM & Browser
-- Memilih dan memanipulasi elemen
-- Event listener
-- Mini project: **To-Do List**
-
-## Minggu 4 — Asynchronous & Proyek
-- Promise, \`async/await\`, \`fetch\` API
-- Modul ES6
-- Proyek akhir: **Aplikasi cuaca** dengan API publik
-
-\`\`\`javascript
-// Contoh async/await
-async function getData() {
-  const res = await fetch("https://api.example.com/data");
-  return await res.json();
-}
-\`\`\`
-
----
-
-Luangkan **1–2 jam per hari** dan konsisten. Mau saya buatkan versi checklist harian?`;
-    }
-    if (/(ide|nama|brainstorm|kreatif)/.test(t)) {
-      return `Berikut beberapa ide nama untuk **kedai kopi modern** ☕:
-
-1. **Seduh Senja** — hangat dan puitis
-2. **Kopi Ruang** — simpel, cocok untuk konsep coworking
-3. **Arunika Coffee** — "arunika" berarti cahaya matahari pagi
-4. **Biji Kota** — urban dan membumi
-5. **Tegukan** — singkat dan mudah diingat
-6. **Nara Roastery** — elegan, cocok untuk spesialti
-7. **Kopi Lintas** — konsep grab & go
-
-**Tips memilih nama:**
-- Mudah diucapkan dan diingat
-- Cek ketersediaan username Instagram & domain
-- Sesuaikan dengan target pasar dan suasana tempat
-
-Mau saya bantu membuat tagline atau konsep logonya juga?`;
-    }
-    if (/(halo|hai|hello|hi\b|pagi|siang|malam)/.test(t)) {
-      return `Halo! 👋 Senang bertemu dengan Anda. Ada yang bisa saya bantu hari ini? Saya bisa membantu menulis, menjawab pertanyaan, membuat kode, atau sekadar ngobrol.`;
-    }
-    return `Pertanyaan yang menarik! Mari saya jelaskan secara sederhana.
-
-**Kecerdasan Buatan (AI)** adalah cabang ilmu komputer yang membuat mesin mampu melakukan tugas yang biasanya membutuhkan kecerdasan manusia — seperti memahami bahasa, mengenali gambar, dan mengambil keputusan.
-
-### Cara kerjanya secara singkat
-1. **Data** — AI belajar dari contoh dalam jumlah besar.
-2. **Model** — pola dari data disimpan dalam bentuk model matematis.
-3. **Prediksi** — model digunakan untuk menjawab atau menebak hal baru.
-
-### Contoh dalam kehidupan sehari-hari
-- Rekomendasi video di YouTube
-- Asisten suara seperti Google Assistant
-- Filter spam di email
-- Chatbot seperti saya 🙂
-
-> Analogi: AI itu seperti murid yang belajar dari ribuan soal latihan, lalu bisa mengerjakan soal baru yang belum pernah dilihat.
-
-Ada bagian yang ingin dibahas lebih dalam?`;
-  }
 
   // ---------- Markdown renderer (lightweight) ----------
   function escapeHtml(s) {
