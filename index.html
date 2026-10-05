@@ -92,20 +92,49 @@
             </button>
             <div class="model-menu" id="modelMenu" role="listbox">
               <button class="model-item active" data-model="Gemini 3.8 Flash">
-                <div><strong>Gemini 3.8 Flash</strong><small>Respons kilat, efisien & penalaran tinggi</small></div>
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>Gemini 3.8 Flash</strong>
+                    <span class="provider-pill pill-google">Google</span>
+                  </div>
+                  <small>Respons kilat, multimodal & penalaran efisien</small>
+                </div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
               <button class="model-item" data-model="Gemini 3.8 Pro">
-                <div><strong>Gemini 3.8 Pro</strong><small>Penalaran kompleks, coding & arsitektur mendalam</small></div>
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>Gemini 3.8 Pro</strong>
+                    <span class="provider-pill pill-google">Google</span>
+                  </div>
+                  <small>Penalaran kompleks, arsitektur software & coding</small>
+                </div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
               <button class="model-item" data-model="Claude 3.5 Sonnet">
-                <div><strong>Claude 3.5 Sonnet</strong><small>SOTA pemahaman konteks & penalaran kode</small></div>
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>Claude 3.5 Sonnet</strong>
+                    <span class="provider-pill pill-anthropic">Anthropic</span>
+                  </div>
+                  <small>SOTA pemahaman konteks, logika & kode</small>
+                </div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
               <button class="model-item" data-model="GPT-4o">
-                <div><strong>GPT-4o</strong><small>Flagship OpenAI multi-modal performa tinggi</small></div>
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>GPT-4o</strong>
+                    <span class="provider-pill pill-openai">OpenAI</span>
+                  </div>
+                  <small>Flagship serbaguna multi-modal performa tinggi</small>
+                </div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <div class="model-menu-divider"></div>
+              <button class="model-menu-action" id="openApiSettings">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Kelola Kunci API Pribadi...</span>
               </button>
             </div>
           </div>
@@ -194,6 +223,59 @@
         <p class="disclaimer">ChatAI dapat membuat kesalahan. Periksa info penting.</p>
       </footer>
     </main>
+  </div>
+
+  <!-- API Settings Modal -->
+  <div class="modal-backdrop" id="apiModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="modalTitle">Pengaturan API Keys</h2>
+        <button class="icon-btn small" id="closeApiModal" aria-label="Tutup">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="modal-desc">Kunci API disimpan secara lokal di peramban Anda (localStorage). Anda dapat memasukkan kunci resmi untuk bypass kuota dan memanggil model secara langsung.</p>
+      
+      <div class="modal-body">
+        <div class="form-field">
+          <label for="keyGemini">
+            <span>Google Gemini API Key</span>
+            <span class="provider-pill pill-google">gemini-2.0 / 1.5</span>
+          </label>
+          <div class="input-password-wrap">
+            <input type="password" id="keyGemini" placeholder="AIzaSy..." autocomplete="off" />
+          </div>
+          <small class="field-hint">Untuk Gemini 3.8 Flash & Gemini 3.8 Pro.</small>
+        </div>
+
+        <div class="form-field">
+          <label for="keyClaude">
+            <span>Anthropic Claude API Key</span>
+            <span class="provider-pill pill-anthropic">claude-3-5</span>
+          </label>
+          <div class="input-password-wrap">
+            <input type="password" id="keyClaude" placeholder="sk-ant-..." autocomplete="off" />
+          </div>
+          <small class="field-hint">Untuk Claude 3.5 Sonnet.</small>
+        </div>
+
+        <div class="form-field">
+          <label for="keyOpenAI">
+            <span>OpenAI API Key</span>
+            <span class="provider-pill pill-openai">gpt-4o</span>
+          </label>
+          <div class="input-password-wrap">
+            <input type="password" id="keyOpenAI" placeholder="sk-..." autocomplete="off" />
+          </div>
+          <small class="field-hint">Untuk model GPT-4o.</small>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="clearApiKeys">Hapus Semua</button>
+        <button type="button" class="btn-primary" id="saveApiKeys">Simpan Kunci</button>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>

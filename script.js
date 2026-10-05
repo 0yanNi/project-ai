@@ -47,19 +47,30 @@
   let generating = false;
   let stopRequested = false;
   let autoScroll = true;
+  let currentAbortController = null;
 
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY));
       if (s && Array.isArray(s.chats)) {
-        if (!s.model || s.model === "ChatAI 4o" || s.model === "ChatAI o3" || s.model === "ChatAI mini") {
+        if (!s.model || s.model.startsWith("ChatAI")) {
           s.model = "Gemini 3.8 Flash";
         }
         if (typeof s.tokensUsed !== "number") s.tokensUsed = 1480;
+        if (!s.apiKeys || typeof s.apiKeys !== "object") {
+          s.apiKeys = { gemini: "", claude: "", openai: "" };
+        }
         return s;
       }
     } catch (_) {}
-    return { chats: [], currentId: null, theme: null, model: "Gemini 3.8 Flash", tokensUsed: 1480 };
+    return {
+      chats: [],
+      currentId: null,
+      theme: null,
+      model: "Gemini 3.8 Flash",
+      tokensUsed: 1480,
+      apiKeys: { gemini: "", claude: "", openai: "" }
+    };
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
@@ -152,6 +163,57 @@
     setModel(item.dataset.model);
     modelMenu.classList.remove("open");
   });
+
+  // ---------- API Settings Modal ----------
+  const apiModal = $("#apiModal");
+  const openApiSettings = $("#openApiSettings");
+  const closeApiModal = $("#closeApiModal");
+  const saveApiKeysBtn = $("#saveApiKeys");
+  const clearApiKeysBtn = $("#clearApiKeys");
+  const keyGeminiInput = $("#keyGemini");
+  const keyClaudeInput = $("#keyClaude");
+  const keyOpenAIInput = $("#keyOpenAI");
+
+  if (openApiSettings) {
+    openApiSettings.addEventListener("click", (e) => {
+      e.stopPropagation();
+      modelMenu.classList.remove("open");
+      keyGeminiInput.value = state.apiKeys?.gemini || "";
+      keyClaudeInput.value = state.apiKeys?.claude || "";
+      keyOpenAIInput.value = state.apiKeys?.openai || "";
+      apiModal.classList.add("open");
+    });
+  }
+  if (closeApiModal) {
+    closeApiModal.addEventListener("click", () => apiModal.classList.remove("open"));
+  }
+  if (apiModal) {
+    apiModal.addEventListener("click", (e) => {
+      if (e.target === apiModal) apiModal.classList.remove("open");
+    });
+  }
+  if (saveApiKeysBtn) {
+    saveApiKeysBtn.addEventListener("click", () => {
+      state.apiKeys = {
+        gemini: keyGeminiInput.value.trim(),
+        claude: keyClaudeInput.value.trim(),
+        openai: keyOpenAIInput.value.trim()
+      };
+      save();
+      apiModal.classList.remove("open");
+      toast("Pengaturan kunci API tersimpan");
+    });
+  }
+  if (clearApiKeysBtn) {
+    clearApiKeysBtn.addEventListener("click", () => {
+      keyGeminiInput.value = "";
+      keyClaudeInput.value = "";
+      keyOpenAIInput.value = "";
+      state.apiKeys = { gemini: "", claude: "", openai: "" };
+      save();
+      toast("Kunci API telah dibersihkan");
+    });
+  }
 
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".model-picker")) modelMenu.classList.remove("open");
@@ -267,6 +329,7 @@
   }
 
   function deleteChat(id) {
+    if (state.currentId === id && generating) stopGeneration();
     state.chats = state.chats.filter((c) => c.id !== id);
     if (state.currentId === id) state.currentId = null;
     save(); renderHistory(); renderMessages();
@@ -314,8 +377,14 @@
     el.className = "msg " + (m.role === "user" ? "user" : "ai");
     el.dataset.index = index;
     if (m.role === "user") {
-      const files = (m.files || []).map((f) =>
-        `<div class="file-chip"><div class="f-ico">${ICON.file}</div><span>${escapeHtml(f)}</span></div>`).join("");
+      const files = (m.files || []).map((f) => {
+        const name = typeof f === "string" ? f : f.name;
+        const isImg = f.data && f.type && f.type.startsWith("image/");
+        if (isImg) {
+          return `<div class="msg-img-wrap"><img src="${f.data}" alt="${escapeHtml(name)}" class="msg-img-preview" /></div>`;
+        }
+        return `<div class="file-chip"><div class="f-ico">${ICON.file}</div><span>${escapeHtml(name)}</span></div>`;
+      }).join("");
       el.innerHTML = `
         <div class="msg-col">
           ${files ? `<div class="msg-files">${files}</div>` : ""}
@@ -475,18 +544,53 @@
   ["#searchTool", "#thinkTool"].forEach((s) =>
     $(s).addEventListener("click", (e) => e.currentTarget.classList.toggle("on")));
 
-  // attachments
-  fileInput.addEventListener("change", () => {
-    [...fileInput.files].forEach((f) => pendingFiles.push(f.name));
+  // attachments (multimodal FileReader support)
+  fileInput.addEventListener("change", async () => {
+    const files = [...fileInput.files];
+    for (const f of files) {
+      const item = { name: f.name, type: f.type || "text/plain", size: f.size };
+      if (f.type && f.type.startsWith("image/")) {
+        item.data = await readFileAsDataURL(f);
+      } else if (f.size < 300 * 1024) {
+        item.content = await readFileAsText(f);
+      }
+      pendingFiles.push(item);
+    }
     fileInput.value = "";
     renderAttachments();
   });
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsText(file);
+    });
+  }
+
   function renderAttachments() {
-    attachmentsEl.innerHTML = pendingFiles.map((f, i) =>
-      `<div class="file-chip"><div class="f-ico">${ICON.file}</div><span>${escapeHtml(f)}</span>
-       <button type="button" data-i="${i}" aria-label="Hapus">${ICON.x}</button></div>`).join("");
+    attachmentsEl.innerHTML = pendingFiles.map((f, i) => {
+      const name = typeof f === "string" ? f : f.name;
+      const isImg = f.data && f.type && f.type.startsWith("image/");
+      return `<div class="file-chip">
+        ${isImg ? `<img src="${f.data}" class="chip-thumb" alt="" />` : `<div class="f-ico">${ICON.file}</div>`}
+        <span>${escapeHtml(name)}</span>
+        <button type="button" data-i="${i}" aria-label="Hapus">${ICON.x}</button>
+      </div>`;
+    }).join("");
     updateSendState();
   }
+
   attachmentsEl.addEventListener("click", (e) => {
     const b = e.target.closest("button[data-i]");
     if (!b) return;
@@ -558,7 +662,13 @@
     updateSendState();
   }
 
-  function stopGeneration() { stopRequested = true; }
+  function stopGeneration() {
+    stopRequested = true;
+    if (currentAbortController) {
+      try { currentAbortController.abort(); } catch (_) {}
+      currentAbortController = null;
+    }
+  }
 
   async function generateReply() {
     const chat = current();
@@ -583,17 +693,29 @@
     setGenerating(true);
     stopRequested = false;
 
+    if (currentAbortController) {
+      try { currentAbortController.abort(); } catch (_) {}
+    }
+    currentAbortController = new AbortController();
+
     let out = "";
     let streamSuccess = false;
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        signal: currentAbortController.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-gemini-key": state.apiKeys?.gemini || "",
+          "x-claude-key": state.apiKeys?.claude || "",
+          "x-openai-key": state.apiKeys?.openai || "",
+        },
         body: JSON.stringify({
           messages: chat.messages.slice(0, -1),
           model: state.model || "Gemini 3.8 Flash",
           webSearch: isSearch,
+          attachments: last.files || []
         }),
       });
 
@@ -634,9 +756,18 @@
             }
           }
         }
+      } else if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`Fetch returned HTTP ${res.status}:`, errText);
       }
     } catch (err) {
-      console.warn("Serverless stream notice:", err.message);
+      if (err.name === "AbortError") {
+        stopRequested = true;
+      } else {
+        console.warn("Serverless stream notice:", err.message);
+      }
+    } finally {
+      currentAbortController = null;
     }
 
     // Fallback typewriter engine if offline or serverless unavailable
