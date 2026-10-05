@@ -3,30 +3,32 @@
    ========================================================= */
 :root {
   --sidebar-w: 260px;
-  --radius: 26px;
+  --radius: 28px;
   --maxw: 768px;
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --ease: cubic-bezier(.4, 0, .2, 1);
 }
 
 [data-theme="dark"] {
-  --bg: #343541;
-  --bg-sidebar: #202123;
-  --bg-elev: #40414f;
-  --bg-hover: #2a2b32;
-  --bg-active: #343541;
-  --bg-user: #10a37f;
+  --bg: #212121;
+  --bg-sidebar: #171717;
+  --bg-panel: #2f2f2f;
+  --bg-elev: #2f2f2f;
+  --bg-hover: rgba(255, 255, 255, .08);
+  --bg-active: #2f2f2f;
+  --bg-user: #303030;
   --user-text: #ffffff;
-  --bg-ai: #444654;
-  --bg-input: #40414f;
-  --bg-code: #000000;
-  --bg-code-head: #343541;
-  --border: rgba(255, 255, 255, .1);
+  --bg-ai: transparent;
+  --bg-input: #2f2f2f;
+  --bg-code: #171717;
+  --bg-code-head: #282828;
+  --border: #383838;
+  --border-subtle: #2f2f2f;
   --text: #ececf1;
   --text-2: #c5c5d2;
   --text-3: #8e8ea0;
-  --accent: #19c37d;
+  --accent: #10a37f;
   --accent-text: #ffffff;
   --shadow: 0 8px 32px rgba(0, 0, 0, .45);
   --overlay: rgba(0, 0, 0, .6);
@@ -178,21 +180,99 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .h-menu button.danger { color: #ef4444; }
 .h-menu svg { width: 18px; height: 18px; }
 
-.sidebar-bottom { border-top: 1px solid var(--border); padding-top: 6px; display: flex; flex-direction: column; gap: 2px; }
-.upgrade {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-  border-radius: 10px; text-align: left; transition: background .15s;
-}
-.upgrade:hover { background: var(--bg-hover); }
-.upgrade-icon {
-  width: 32px; height: 32px; border-radius: 50%;
-  display: grid; place-items: center;
+.sidebar-bottom { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+/* Usage & Quota Widget */
+.usage-widget {
+  background: var(--bg-panel);
   border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
-.upgrade-icon svg { width: 16px; height: 16px; }
-.upgrade-text { display: flex; flex-direction: column; line-height: 1.3; }
-.upgrade-text strong { font-size: 14px; font-weight: 500; }
-.upgrade-text small { font-size: 12px; color: var(--text-3); }
+.usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.usage-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.usage-title svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--accent);
+}
+.usage-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(16, 163, 127, .15);
+  color: #10a37f;
+}
+.usage-bar-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, .08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+[data-theme="light"] .usage-bar-track {
+  background: rgba(0, 0, 0, .08);
+}
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #10a37f, #19c37d);
+  transition: width .4s ease;
+}
+.usage-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.status-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+[data-theme="light"] .status-indicators {
+  border-top-color: rgba(0, 0, 0, .06);
+}
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10a37f;
+  box-shadow: 0 0 6px rgba(16, 163, 127, .8);
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(.85); }
+}
 
 .profile { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 10px; border-radius: 10px; }
 .profile:hover { background: var(--bg-hover); }

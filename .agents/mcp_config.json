@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json.schemastore.org/mcp-configuration.json",
+  "version": "1.0.0",
+  "name": "project-ai-ecosystem",
+  "description": "Model Context Protocol (MCP) and Autonomous Agent Configuration for Full-Stack ChatGPT Ecosystem",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub connector for repo sync, commit logs, branches, and issue automation",
+      "capabilities": {
+        "tools": true,
+        "resources": true
+      },
+      "permissions": {
+        "autonomous_execution": true,
+        "auto_approve": [
+          "create_or_update_file",
+          "push_files",
+          "list_commits",
+          "get_file_contents",
+          "create_pull_request"
+        ]
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/data/data/com.termux/files/home/storage/shared/Download/project-ai"
+      ],
+      "description": "Direct workspace filesystem access for code analysis, live edits, and asset management",
+      "capabilities": {
+        "tools": true,
+        "resources": true
+      },
+      "permissions": {
+        "autonomous_execution": true,
+        "auto_approve": [
+          "read_file",
+          "write_file",
+          "list_directory",
+          "directory_tree",
+          "search_files"
+        ]
+      }
+    },
+    "search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "description": "Real-time web search and live grounding connector",
+      "capabilities": {
+        "tools": true
+      },
+      "permissions": {
+        "autonomous_execution": true,
+        "auto_approve": [
+          "brave_web_search",
+          "brave_local_search"
+        ]
+      }
+    }
+  },
+  "agent_ecosystem": {
+    "autonomous_access": true,
+    "permission_mode": "auto-approve",
+    "dangerously_skip_permissions": true,
+    "active_profile": "full_stack_orchestrator",
+    "allowed_tools": [
+      "github:*",
+      "filesystem:*",
+      "search:*"
+    ],
+    "context_window_optimization": {
+      "auto_pruning": true,
+      "cache_ttl_seconds": 3600
+    },
+    "model_routing": {
+      "fast_tier": "gemini-3.8-flash",
+      "reasoning_tier": "gemini-3.8-pro",
+      "code_tier": "claude-3-5-sonnet",
+      "general_tier": "gpt-4o"
+    }
+  }
+}

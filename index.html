@@ -38,12 +38,31 @@
       <nav class="history" id="history"></nav>
 
       <div class="sidebar-bottom">
-        <button class="upgrade">
-          <span class="upgrade-icon">
-            <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5L12 16.5 5.5 21l2-7.5L2 9h7z"/></svg>
-          </span>
-          <span class="upgrade-text"><strong>Upgrade ke Plus</strong><small>Akses model terbaik & fitur lain</small></span>
-        </button>
+        <div class="usage-widget" id="usageWidget">
+          <div class="usage-header">
+            <div class="usage-title">
+              <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <span>Usage & Quota</span>
+            </div>
+            <span class="usage-badge" id="usagePercent">24%</span>
+          </div>
+          <div class="usage-bar-track">
+            <div class="usage-bar-fill" id="usageBarFill" style="width: 24%;"></div>
+          </div>
+          <div class="usage-stats">
+            <span id="tokenCountLabel">1,480 / 10,000 tokens</span>
+          </div>
+          <div class="status-indicators">
+            <div class="status-pill status-vercel" title="Status serverless Vercel: Terhubung">
+              <span class="status-dot"></span>
+              <span>Vercel: Connected</span>
+            </div>
+            <div class="status-pill status-github" title="Status sinkronisasi GitHub: Tersinkron">
+              <span class="status-dot"></span>
+              <span>GitHub: Synced</span>
+            </div>
+          </div>
+        </div>
         <div class="profile" id="profile">
           <div class="avatar">U</div>
           <div class="profile-info"><strong>Pengguna</strong><small>Gratis</small></div>
@@ -68,20 +87,24 @@
           </button>
           <div class="model-picker">
             <button class="model-btn" id="modelBtn" aria-haspopup="listbox">
-              <span id="modelName">ChatAI 4o</span>
+              <span id="modelName">Gemini 3.8 Flash</span>
               <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="model-menu" id="modelMenu" role="listbox">
-              <button class="model-item active" data-model="ChatAI 4o">
-                <div><strong>ChatAI 4o</strong><small>Cocok untuk sebagian besar tugas</small></div>
+              <button class="model-item active" data-model="Gemini 3.8 Flash">
+                <div><strong>Gemini 3.8 Flash</strong><small>Respons kilat, efisien & penalaran tinggi</small></div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
-              <button class="model-item" data-model="ChatAI o3">
-                <div><strong>ChatAI o3</strong><small>Penalaran tingkat lanjut</small></div>
+              <button class="model-item" data-model="Gemini 3.8 Pro">
+                <div><strong>Gemini 3.8 Pro</strong><small>Penalaran kompleks, coding & arsitektur mendalam</small></div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
-              <button class="model-item" data-model="ChatAI mini">
-                <div><strong>ChatAI mini</strong><small>Lebih cepat untuk tugas harian</small></div>
+              <button class="model-item" data-model="Claude 3.5 Sonnet">
+                <div><strong>Claude 3.5 Sonnet</strong><small>SOTA pemahaman konteks & penalaran kode</small></div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <button class="model-item" data-model="GPT-4o">
+                <div><strong>GPT-4o</strong><small>Flagship OpenAI multi-modal performa tinggi</small></div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
             </div>

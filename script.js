@@ -51,15 +51,36 @@
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY));
-      if (s && Array.isArray(s.chats)) return s;
+      if (s && Array.isArray(s.chats)) {
+        if (!s.model || s.model === "ChatAI 4o" || s.model === "ChatAI o3" || s.model === "ChatAI mini") {
+          s.model = "Gemini 3.8 Flash";
+        }
+        if (typeof s.tokensUsed !== "number") s.tokensUsed = 1480;
+        return s;
+      }
     } catch (_) {}
-    return { chats: [], currentId: null, theme: null, model: "ChatAI 4o" };
+    return { chats: [], currentId: null, theme: null, model: "Gemini 3.8 Flash", tokensUsed: 1480 };
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
   }
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const current = () => state.chats.find((c) => c.id === state.currentId) || null;
+
+  // ---------- Usage & Quota Widget Sync ----------
+  function updateUsageWidget(deltaTokens = 0) {
+    if (typeof state.tokensUsed !== "number") state.tokensUsed = 1480;
+    if (deltaTokens > 0) state.tokensUsed += deltaTokens;
+    const maxTokens = 10000;
+    const pct = Math.min(100, Math.max(5, Math.round((state.tokensUsed / maxTokens) * 100)));
+    const percentEl = $("#usagePercent");
+    const barEl = $("#usageBarFill");
+    const labelEl = $("#tokenCountLabel");
+    if (percentEl) percentEl.textContent = `${pct}%`;
+    if (barEl) barEl.style.width = `${pct}%`;
+    if (labelEl) labelEl.textContent = `${state.tokensUsed.toLocaleString()} / ${maxTokens.toLocaleString()} tokens`;
+    save();
+  }
 
   // ---------- Theme ----------
   function applyTheme(t) {
@@ -120,7 +141,7 @@
       b.classList.toggle("active", b.dataset.model === name));
     save();
   }
-  setModel(state.model || "ChatAI 4o");
+  setModel(state.model || "Gemini 3.8 Flash");
   modelBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     modelMenu.classList.toggle("open");
@@ -331,8 +352,8 @@
     if (codeBtn) {
       const code = codeBtn.closest(".code-block").querySelector("code").innerText;
       await copyText(code);
-      codeBtn.innerHTML = `${ICON.check}<span>Disalin</span>`;
-      setTimeout(() => (codeBtn.innerHTML = `${ICON.copy}<span>Salin</span>`), 1500);
+      codeBtn.innerHTML = `${ICON.check}<span>Copied!</span>`;
+      setTimeout(() => (codeBtn.innerHTML = `${ICON.copy}<span>Copy Code</span>`), 1500);
       return;
     }
     const btn = e.target.closest(".msg-actions button");
@@ -550,8 +571,9 @@
     const el = buildMessage(reply, idx);
     el.classList.add("streaming");
     const md = el.querySelector(".md");
-    const thinkLabel = $("#thinkTool").classList.contains("on") ? "Sedang bernalar" :
-      $("#searchTool").classList.contains("on") ? "Mencari di web" : "";
+    const isSearch = $("#searchTool").classList.contains("on");
+    const isThink = $("#thinkTool").classList.contains("on");
+    const thinkLabel = isThink ? "Sedang bernalar" : isSearch ? "Mencari di web" : "";
     md.innerHTML = thinkLabel
       ? `<div class="thinking"><span class="shimmer">${thinkLabel}…</span></div>`
       : `<div class="thinking" aria-label="AI sedang mengetik"><span class="typing"><span></span><span></span><span></span></span></div>`;
@@ -561,25 +583,82 @@
     setGenerating(true);
     stopRequested = false;
 
-    // typing indicator duration
-    await sleep(thinkLabel ? 1600 : 900 + Math.random() * 600);
-
-    // typewriter effect: reveal a few characters per frame
-    const full = mockResponse(last.content);
     let out = "";
-    let pos = 0;
-    while (pos < full.length) {
-      if (stopRequested || state.currentId !== chatId) break;
-      const step = 2 + Math.floor(Math.random() * 3);
-      pos = Math.min(full.length, pos + step);
-      out = full.slice(0, pos);
-      reply.content = out;
-      md.innerHTML = renderMarkdown(out);
-      if (autoScroll) chatEl.scrollTop = chatEl.scrollHeight;
-      const ch = full[pos - 1];
-      await sleep(/[.!?\n]/.test(ch) ? 60 : 12 + Math.random() * 14);
+    let streamSuccess = false;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: chat.messages.slice(0, -1),
+          model: state.model || "Gemini 3.8 Flash",
+          webSearch: isSearch,
+        }),
+      });
+
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!stopRequested && state.currentId === chatId) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":")) continue;
+            if (trimmed.startsWith("data: ")) {
+              const dataStr = trimmed.slice(6);
+              if (dataStr === "[DONE]") {
+                streamSuccess = true;
+                break;
+              }
+              try {
+                const data = JSON.parse(dataStr);
+                if (data.text) {
+                  streamSuccess = true;
+                  out += data.text;
+                  reply.content = out;
+                  md.innerHTML = renderMarkdown(out);
+                  if (autoScroll) chatEl.scrollTop = chatEl.scrollHeight;
+                }
+                if (data.usage && data.usage.totalTokens) {
+                  updateUsageWidget(data.usage.totalTokens);
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Serverless stream notice:", err.message);
     }
-    reply.content = out || "_(Dihentikan)_";
+
+    // Fallback typewriter engine if offline or serverless unavailable
+    if (!streamSuccess && !stopRequested && state.currentId === chatId) {
+      await sleep(thinkLabel ? 1200 : 600);
+      const full = mockResponse(last.content);
+      let pos = 0;
+      while (pos < full.length) {
+        if (stopRequested || state.currentId !== chatId) break;
+        const step = 2 + Math.floor(Math.random() * 3);
+        pos = Math.min(full.length, pos + step);
+        out = full.slice(0, pos);
+        reply.content = out;
+        md.innerHTML = renderMarkdown(out);
+        if (autoScroll) chatEl.scrollTop = chatEl.scrollHeight;
+        const ch = full[pos - 1];
+        await sleep(/[.!?\n]/.test(ch) ? 50 : 12 + Math.random() * 12);
+      }
+      updateUsageWidget(Math.floor(out.length / 4));
+    }
+
+    reply.content = out || (stopRequested ? "_(Dihentikan)_" : "Tidak ada respons.");
     chat.updated = Date.now();
     save();
     setGenerating(false);
@@ -759,7 +838,7 @@ Ada bagian yang ingin dibahas lebih dalam?`;
         while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
         i++;
         html += `<div class="code-block"><div class="code-head"><span>${escapeHtml(lang)}</span>
-          <button class="code-copy">${ICON.copy}<span>Salin</span></button></div>
+          <button class="code-copy">${ICON.copy}<span>Copy Code</span></button></div>
           <pre><code>${highlight(buf.join("\n"))}</code></pre></div>`;
         continue;
       }
@@ -815,6 +894,7 @@ Ada bagian yang ingin dibahas lebih dalam?`;
   });
   renderHistory();
   renderMessages();
+  updateUsageWidget();
   updateSendState();
   if (!isMobile()) input.focus();
 })();
