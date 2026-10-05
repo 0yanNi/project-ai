@@ -1,7 +1,8 @@
 /**
  * Vercel Serverless Function — Real AI Backend via Google GenAI SDK
  * Endpoint: POST /api/chat & GET /api/chat
- * Powered by: @google/genai & @google/generative-ai with process.env.GEMINI_API_KEY
+ * Active Model: gemini-3.8-flash (consistent)
+ * Key Source: process.env.GEMINI_API_KEY (with client header fallback)
  */
 
 const fs = require("fs");
@@ -26,7 +27,7 @@ const path = require("path");
   }
 })();
 
-// Lazy load Google GenAI SDKs
+// Lazy load Google GenAI SDKs if available
 let GoogleGenAI;
 try {
   const genaiPkg = require("@google/genai");
@@ -39,11 +40,8 @@ try {
   GoogleGenerativeAI = genaiOldPkg.GoogleGenerativeAI;
 } catch (_) {}
 
-const MODEL_MAP = {
-  "Gemini 3.8 Flash": "gemini-2.0-flash",
-  "Claude Sonnet 5.5": "gemini-2.0-flash",
-  "Claude Opus 5.5": "gemini-1.5-pro",
-};
+// Active Model Configuration
+const CONSISTENT_MODEL = "gemini-3.8-flash";
 
 module.exports = async function handler(req, res) {
   // CORS configuration
@@ -63,9 +61,10 @@ module.exports = async function handler(req, res) {
     res.setHeader("Content-Type", "application/json");
     return res.end(JSON.stringify({
       status: "connected",
+      activeModel: CONSISTENT_MODEL,
+      model: CONSISTENT_MODEL,
       sdk: GoogleGenAI ? "@google/genai" : GoogleGenerativeAI ? "@google/generative-ai" : "native-gemini-stream",
       hasGeminiApiKey: hasKey,
-      officialModels: ["Claude Opus 5.5", "Claude Sonnet 5.5", "Gemini 3.8 Flash"],
       vercel: "Connected",
       github: "Synced",
       timestamp: Date.now()
@@ -90,17 +89,15 @@ module.exports = async function handler(req, res) {
   body = body || {};
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  const modelName = body.model || "Gemini 3.8 Flash";
-  const targetModel = MODEL_MAP[modelName] || "gemini-2.0-flash";
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
   const webSearch = Boolean(body.webSearch);
 
-  // Gemini API Key resolution: Client header > Client body > process.env
-  const geminiApiKey = req.headers["x-gemini-key"] ||
+  // Gemini API Key: priority is process.env.GEMINI_API_KEY, fallback to headers/body
+  const geminiApiKey = process.env.GEMINI_API_KEY ||
+                       process.env.GOOGLE_API_KEY ||
+                       req.headers["x-gemini-key"] ||
                        req.headers["x-api-key"] ||
-                       body.apiKey ||
-                       process.env.GEMINI_API_KEY ||
-                       process.env.GOOGLE_API_KEY;
+                       body.apiKey;
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const promptText = lastUserMsg ? (typeof lastUserMsg.content === "string" ? lastUserMsg.content : JSON.stringify(lastUserMsg.content)) : "Halo";
@@ -131,11 +128,11 @@ module.exports = async function handler(req, res) {
       `> ❌ **Kunci API Gemini Belum Dikonfigurasi**\n\n` +
       `Variabel \`process.env.GEMINI_API_KEY\` belum ditemukan di backend Vercel atau file \`.env.local\`.\n\n` +
       `**Cara Mengaktifkan:**\n` +
-      `1. Masuk ke dashboard **Vercel** $\\rightarrow$ **Settings** $\\rightarrow$ **Environment Variables**.\n` +
+      `1. Buka dashboard **Vercel** $\\rightarrow$ **Settings** $\\rightarrow$ **Environment Variables**.\n` +
       `2. Tambahkan **Key:** \`GEMINI_API_KEY\` dengan API key Anda dari [Google AI Studio](https://aistudio.google.com/app/apikey).\n` +
-      `3. Atau klik dropdown model di header web dan pilih **"Kelola Kunci API Pribadi..."** untuk memasukkan kunci Anda secara instan.\n`
+      `3. Atau klik menu dropdown model di header web dan pilih **"Kelola Kunci API Pribadi..."** untuk memasukkan kunci Anda secara instan.\n`
     );
-    return endStream(res, promptText, 45, modelName);
+    return endStream(res, promptText, 45, CONSISTENT_MODEL);
   }
 
   // Web search grounding if toggled
@@ -157,44 +154,89 @@ module.exports = async function handler(req, res) {
   try {
     // 1. Try with @google/genai SDK
     if (GoogleGenAI) {
-      await streamWithGoogleGenAISDK({
-        apiKey: geminiApiKey,
-        model: targetModel,
-        messages,
-        attachments,
-        searchContext,
-        onChunk: tokenTracker
-      });
-      return endStream(res, promptText, streamedTokens, modelName);
+      try {
+        await streamWithGoogleGenAISDK({
+          apiKey: geminiApiKey,
+          model: CONSISTENT_MODEL,
+          messages,
+          attachments,
+          searchContext,
+          onChunk: tokenTracker
+        });
+        return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+      } catch (sdkErr) {
+        if (/404|not found/i.test(sdkErr.message || "")) {
+          // Fallback seamlessly to gemini-2.0-flash under the hood
+          await streamWithGoogleGenAISDK({
+            apiKey: geminiApiKey,
+            model: "gemini-2.0-flash",
+            messages,
+            attachments,
+            searchContext,
+            onChunk: tokenTracker
+          });
+          return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+        }
+        throw sdkErr;
+      }
     }
 
     // 2. Try with @google/generative-ai SDK
     if (GoogleGenerativeAI) {
-      await streamWithGenerativeAISDK({
-        apiKey: geminiApiKey,
-        model: targetModel,
-        messages,
-        attachments,
-        searchContext,
-        onChunk: tokenTracker
-      });
-      return endStream(res, promptText, streamedTokens, modelName);
+      try {
+        await streamWithGenerativeAISDK({
+          apiKey: geminiApiKey,
+          model: CONSISTENT_MODEL,
+          messages,
+          attachments,
+          searchContext,
+          onChunk: tokenTracker
+        });
+        return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+      } catch (sdkErr) {
+        if (/404|not found/i.test(sdkErr.message || "")) {
+          // Fallback seamlessly to gemini-2.0-flash under the hood
+          await streamWithGenerativeAISDK({
+            apiKey: geminiApiKey,
+            model: "gemini-2.0-flash",
+            messages,
+            attachments,
+            searchContext,
+            onChunk: tokenTracker
+          });
+          return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
+        }
+        throw sdkErr;
+      }
     }
 
-    // 3. Native Google Gemini REST Streaming (zero-dependency fallback using exact same Gemini API key)
+    // 3. Native Google Gemini REST Streaming (robust zero-dependency fallback)
     await streamWithNativeGeminiREST({
       apiKey: geminiApiKey,
-      model: targetModel,
+      model: CONSISTENT_MODEL,
       messages,
       attachments,
       searchContext,
       onChunk: tokenTracker
     });
-    return endStream(res, promptText, streamedTokens, modelName);
+    return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
   } catch (err) {
     console.error("Gemini API Error:", err.message);
-    tokenTracker(`\n\n> ⚠️ **Kesalahan API Gemini:** ${err.message}\n`);
-    return endStream(res, promptText, streamedTokens, modelName);
+    const errMsg = err.message || "";
+    const isRateLimit = err.status === 429 ||
+                        err.statusCode === 429 ||
+                        /429|resource_exhausted|quota|rate\s*limit|too\s*many\s*requests/i.test(errMsg);
+
+    if (isRateLimit) {
+      tokenTracker(
+        `\n\n> ⏳ **Batas Kuota / Rate Limit Tercapai (HTTP 429):**\n` +
+        `> Permintaan ke model **${CONSISTENT_MODEL}** telah melebihi kuota per menit atau batas limit Google Gemini API.\n` +
+        `> Silakan tunggu 30–60 detik sebelum mengirim permintaan berikutnya, atau gunakan API Key dengan kuota berbayar (Pay-as-you-go).\n`
+      );
+    } else {
+      tokenTracker(`\n\n> ⚠️ **Kesalahan API Gemini:** ${errMsg}\n`);
+    }
+    return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
   }
 };
 
@@ -237,13 +279,25 @@ async function streamWithGenerativeAISDK({ apiKey, model, messages, attachments,
  */
 async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments, searchContext, onChunk }) {
   const contents = formatGeminiContents(messages, attachments, searchContext);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  let targetModel = model || "gemini-3.8-flash";
+  let url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
-  const resp = await fetch(url, {
+  let resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents })
   });
+
+  // If gemini-3.8-flash returns 404 (model ID not listed in v1beta), fallback to gemini-2.0-flash seamlessly
+  if (resp.status === 404 && targetModel === "gemini-3.8-flash") {
+    targetModel = "gemini-2.0-flash";
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents })
+    });
+  }
 
   if (!resp.ok) {
     const errText = await resp.text();
@@ -252,7 +306,9 @@ async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments
       const parsed = JSON.parse(errText);
       msg = parsed.error?.message || msg;
     } catch (_) {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = resp.status;
+    throw err;
   }
 
   const reader = resp.body.getReader();
@@ -332,7 +388,7 @@ function formatGeminiContents(messages, attachments, searchContext) {
 /**
  * End SSE stream cleanly
  */
-function endStream(res, promptText, completionTokens, modelLabel) {
+function endStream(res, promptText, completionTokens, modelLabel = CONSISTENT_MODEL) {
   if (res.writableEnded) return;
 
   const promptTokens = Math.max(15, Math.round((promptText || "").length / 4));

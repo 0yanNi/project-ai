@@ -273,6 +273,10 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .45; transform: scale(.85); }
 }
+.status-dot.disconnected {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, .8);
+}
 
 .profile { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 10px; border-radius: 10px; }
 .profile:hover { background: var(--bg-hover); }

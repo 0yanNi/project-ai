@@ -227,16 +227,16 @@
       }
 
       try {
-        const resp = await fetch("/api/sync", {
+        const resp = await fetch("/api/status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ apiKey: geminiKey })
         });
         const data = await resp.json();
-        if (resp.ok && data.ok) {
+        if (resp.ok && (data.valid || data.keyValid || data.status === "Connected")) {
           keyVerifyStatus.className = "key-verify-status success";
-          keyVerifyStatus.textContent = `✓ Kunci Terverifikasi! Status Akun: ${data.tier} (${data.availableModelsCount || "Semua"} model aktif).`;
-          if (profileTierEl) profileTierEl.textContent = data.tier;
+          keyVerifyStatus.textContent = `✓ Kunci Terverifikasi! Model aktif: ${data.activeModel || "gemini-3.8-flash"} (${data.modelsAvailable || "Semua"} model aktif).`;
+          if (profileTierEl) profileTierEl.textContent = data.account?.tier || "Pro (Verified)";
           toast("Kunci API valid & terverifikasi");
         } else {
           keyVerifyStatus.className = "key-verify-status error";
@@ -290,38 +290,55 @@
     const icons = document.querySelectorAll(".sync-icon");
     icons.forEach((ic) => ic.classList.add("spinning"));
 
+    const apiKeyStatusText = $("#statusApiKeyText");
+    const apiDot = $("#statusApiDot");
+    const modelStatusText = $("#statusModelText");
+    const modelDot = $("#statusModelDot");
+
+    let toastMessage = "Akun/API Key berhasil tersambung & tersinkronisasi!";
+
     try {
-      // Connect to dedicated /api/sync endpoint with active client key
+      // Connect to status endpoint (/api/status) with active client key
       const headers = {};
       if (state.apiKeys?.gemini) {
         headers["x-gemini-key"] = state.apiKeys.gemini;
       }
-      const res = await fetch("/api/sync", { method: "GET", headers });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.account) {
-          if (profileTierEl && data.account.tier) {
-            profileTierEl.textContent = data.account.tier;
-          }
-          if (profileNameEl && data.account.name) {
-            profileNameEl.textContent = data.account.name;
-          }
-          if (typeof data.account.quotaUsed === "number") {
-            state.tokensUsed = data.account.quotaUsed;
-          }
+      const res = await fetch("/api/status", { method: "GET", headers });
+      const data = await res.json();
+
+      if (data.status === "Connected" || data.valid || data.keyValid) {
+        if (apiKeyStatusText) apiKeyStatusText.textContent = "API: Connected";
+        if (apiDot) apiDot.classList.remove("disconnected");
+        if (modelStatusText) {
+          modelStatusText.textContent = `Model: ${data.activeModel || "gemini-3.8-flash"}`;
         }
+        if (modelDot) modelDot.classList.remove("disconnected");
+        if (profileTierEl) {
+          profileTierEl.textContent = data.account?.tier || "Pro (Verified)";
+        }
+        if (profileNameEl && data.account?.name) {
+          profileNameEl.textContent = data.account.name;
+        }
+        if (typeof data.account?.quotaUsed === "number") {
+          state.tokensUsed = data.account.quotaUsed;
+        }
+        toastMessage = "Akun/API Key berhasil tersambung & tersinkronisasi!";
       } else {
-        // Fallback to /api/chat GET endpoint
-        const fallbackRes = await fetch("/api/chat", { method: "GET" });
-        if (fallbackRes.ok) {
-          const fbData = await fallbackRes.json();
-          if (fbData.hasGeminiApiKey && profileTierEl) {
-            profileTierEl.textContent = "Pro (Active)";
-          }
+        if (apiKeyStatusText) apiKeyStatusText.textContent = `API: ${data.connection || "Disconnected"}`;
+        if (apiDot) apiDot.classList.add("disconnected");
+        if (modelStatusText) {
+          modelStatusText.textContent = `Model: ${data.activeModel || "gemini-3.8-flash"}`;
         }
+        if (profileTierEl) {
+          profileTierEl.textContent = "Gratis / Setup";
+        }
+        toastMessage = data.message || "API Key belum terpasang atau tidak valid";
       }
     } catch (e) {
-      console.warn("Live fetch notice:", e.message);
+      console.warn("Status fetch notice:", e.message);
+      if (apiKeyStatusText) apiKeyStatusText.textContent = "API: Offline / Local";
+      if (apiDot) apiDot.classList.add("disconnected");
+      toastMessage = "Gagal menghubungi endpoint status";
     }
 
     // Refresh quota indicators & model state
@@ -332,7 +349,7 @@
     await sleep(400);
     icons.forEach((ic) => ic.classList.remove("spinning"));
     syncing = false;
-    toast("Data synced successfully");
+    toast(toastMessage);
   }
 
   const syncBtn = $("#syncBtn");
