@@ -18,13 +18,12 @@ Klon antarmuka resmi ChatGPT (HTML, CSS modern, Vanilla JS) yang terintegrasi pe
 * **Widget Usage & Quota**: Tersemat di bawah sidebar navigasi, menampilkan persentase kuota sesi, penghitung token live, dan indikator status *Vercel: Connected* & *GitHub: Synced*.
 
 ### 2. Backend Serverless Vercel (`/api/chat`)
-* **Endpoint Streaming**: `POST /api/chat` berbasis Server-Sent Events (SSE) berkecepatan tinggi tanpa buffering.
-* **Multi-Model Support**:
-  * ⚡ **Gemini 3.8 Flash**
-  * 🧠 **Gemini 3.8 Pro**
-  * 💎 **Claude 3.5 Sonnet**
-  * 🌐 **GPT-4o**
-* **Dynamic Serverless Engine**: Mendukung koneksi langsung ke provider API (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) serta engine cerdas bawaan yang responsif dan sadar konteks.
+* **Endpoint Streaming & Live Sync**: `POST /api/chat` berbasis Server-Sent Events (SSE) berkecepatan tinggi & `GET /api/chat` untuk sinkronisasi kuota dan session terkini.
+* **Model Resmi Antigravity**:
+  * 👑 **Claude Opus 5.5**: Flagship, penalaran & arsitektur kompleks terdalam.
+  * ⚡ **Claude Sonnet 5.5**: SOTA coding, logic cepat & presisi tinggi.
+  * 🚀 **Gemini 3.8 Flash**: Respons kilat, penalaran efisien & hemat kuota.
+* **Dynamic Serverless Engine**: Mendukung koneksi langsung ke provider API (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`) serta engine cerdas bawaan yang responsif dan sadar konteks.
 
 ### 3. Ekosistem Agen & MCP (`.agents/mcp_config.json`)
 * Konfigurasi konektor Model Context Protocol bawaan:

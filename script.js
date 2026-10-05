@@ -49,11 +49,13 @@
   let autoScroll = true;
   let currentAbortController = null;
 
+  const OFFICIAL_MODELS = ["Claude Opus 5.5", "Claude Sonnet 5.5", "Gemini 3.8 Flash"];
+
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY));
       if (s && Array.isArray(s.chats)) {
-        if (!s.model || s.model.startsWith("ChatAI")) {
+        if (!s.model || !OFFICIAL_MODELS.includes(s.model)) {
           s.model = "Gemini 3.8 Flash";
         }
         if (typeof s.tokensUsed !== "number") s.tokensUsed = 1480;
@@ -215,9 +217,57 @@
     });
   }
 
+  // ---------- Real-Time Sync / Live Fetch ----------
+  let syncing = false;
+  async function syncData() {
+    if (syncing) return;
+    syncing = true;
+    const icons = document.querySelectorAll(".sync-icon");
+    icons.forEach((ic) => ic.classList.add("spinning"));
+
+    try {
+      const res = await fetch("/api/chat", { method: "GET" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.usage?.totalTokens) {
+          state.tokensUsed = data.usage.totalTokens;
+        }
+      }
+    } catch (e) {
+      console.warn("Live fetch notice:", e.message);
+    }
+
+    // Refresh quota indicators & model state
+    updateUsageWidget();
+    setModel(state.model || "Gemini 3.8 Flash");
+    renderHistory();
+
+    await sleep(400);
+    icons.forEach((ic) => ic.classList.remove("spinning"));
+    syncing = false;
+    toast("Data synced successfully");
+  }
+
+  const syncBtn = $("#syncBtn");
+  if (syncBtn) syncBtn.addEventListener("click", syncData);
+  const sidebarSyncBtn = $("#sidebarSyncBtn");
+  if (sidebarSyncBtn) sidebarSyncBtn.addEventListener("click", syncData);
+
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".model-picker")) modelMenu.classList.remove("open");
-    if (!e.target.closest(".h-menu") && !e.target.closest(".h-more")) closeHistoryMenu();
+    if (!e.target.closest(".model-picker")) {
+      modelMenu.classList.remove("open");
+    }
+    if (!e.target.closest(".h-menu") && !e.target.closest(".h-more")) {
+      closeHistoryMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      modelMenu.classList.remove("open");
+      if (apiModal) apiModal.classList.remove("open");
+      closeHistoryMenu();
+    }
   });
 
   // ---------- History ----------

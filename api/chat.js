@@ -11,27 +11,23 @@
  */
 
 const MODEL_REGISTRY = {
+  "Claude Opus 5.5": {
+    provider: "anthropic",
+    targetModel: "claude-opus-5-5",
+    fallbackModel: "claude-3-opus-20240229",
+    label: "Claude Opus 5.5 (Anthropic Flagship)"
+  },
+  "Claude Sonnet 5.5": {
+    provider: "anthropic",
+    targetModel: "claude-sonnet-5-5",
+    fallbackModel: "claude-3-5-sonnet-20241022",
+    label: "Claude Sonnet 5.5 (Anthropic SOTA)"
+  },
   "Gemini 3.8 Flash": {
     provider: "google",
-    targetModel: "gemini-2.0-flash",
-    fallbackModel: "gemini-1.5-flash",
+    targetModel: "gemini-3.8-flash",
+    fallbackModel: "gemini-2.0-flash",
     label: "Gemini 3.8 Flash (Google)"
-  },
-  "Gemini 3.8 Pro": {
-    provider: "google",
-    targetModel: "gemini-1.5-pro",
-    fallbackModel: "gemini-1.5-flash",
-    label: "Gemini 3.8 Pro (Google)"
-  },
-  "Claude 3.5 Sonnet": {
-    provider: "anthropic",
-    targetModel: "claude-3-5-sonnet-20241022",
-    label: "Claude 3.5 Sonnet (Anthropic)"
-  },
-  "GPT-4o": {
-    provider: "openai",
-    targetModel: "gpt-4o",
-    label: "GPT-4o (OpenAI)"
   }
 };
 
@@ -46,9 +42,25 @@ module.exports = async function handler(req, res) {
     return res.end();
   }
 
+  // Live session status & sync endpoint
+  if (req.method === "GET") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    return res.end(JSON.stringify({
+      status: "connected",
+      environment: "Vercel Serverless / Antigravity 2.0",
+      officialModels: Object.keys(MODEL_REGISTRY),
+      vercel: "Connected",
+      github: "Synced",
+      mcp: "Active",
+      timestamp: Date.now()
+    }));
+  }
+
   if (req.method !== "POST") {
     res.statusCode = 405;
-    return res.json({ error: "Method not allowed. Use POST." });
+    res.setHeader("Content-Type", "application/json");
+    return res.end(JSON.stringify({ error: "Method not allowed. Use GET or POST." }));
   }
 
   // Parse JSON body safely

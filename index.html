@@ -44,7 +44,12 @@
               <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               <span>Usage & Quota</span>
             </div>
-            <span class="usage-badge" id="usagePercent">24%</span>
+            <div class="usage-actions">
+              <button class="icon-btn small sync-btn-mini" id="sidebarSyncBtn" title="Sync / Fetch data status terkini" aria-label="Sync status">
+                <svg class="sync-icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              </button>
+              <span class="usage-badge" id="usagePercent">24%</span>
+            </div>
           </div>
           <div class="usage-bar-track">
             <div class="usage-bar-fill" id="usageBarFill" style="width: 24%;"></div>
@@ -91,43 +96,33 @@
               <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="model-menu" id="modelMenu" role="listbox">
+              <button class="model-item" data-model="Claude Opus 5.5">
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>Claude Opus 5.5</strong>
+                    <span class="provider-pill pill-anthropic">Flagship</span>
+                  </div>
+                  <small>Penalaran & arsitektur kompleks terdalam</small>
+                </div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
+              <button class="model-item" data-model="Claude Sonnet 5.5">
+                <div class="model-meta">
+                  <div class="model-title-row">
+                    <strong>Claude Sonnet 5.5</strong>
+                    <span class="provider-pill pill-anthropic">Coding SOTA</span>
+                  </div>
+                  <small>SOTA coding, logic cepat & presisi tinggi</small>
+                </div>
+                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+              </button>
               <button class="model-item active" data-model="Gemini 3.8 Flash">
                 <div class="model-meta">
                   <div class="model-title-row">
                     <strong>Gemini 3.8 Flash</strong>
-                    <span class="provider-pill pill-google">Google</span>
+                    <span class="provider-pill pill-google">Fast AI</span>
                   </div>
-                  <small>Respons kilat, multimodal & penalaran efisien</small>
-                </div>
-                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
-              </button>
-              <button class="model-item" data-model="Gemini 3.8 Pro">
-                <div class="model-meta">
-                  <div class="model-title-row">
-                    <strong>Gemini 3.8 Pro</strong>
-                    <span class="provider-pill pill-google">Google</span>
-                  </div>
-                  <small>Penalaran kompleks, arsitektur software & coding</small>
-                </div>
-                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
-              </button>
-              <button class="model-item" data-model="Claude 3.5 Sonnet">
-                <div class="model-meta">
-                  <div class="model-title-row">
-                    <strong>Claude 3.5 Sonnet</strong>
-                    <span class="provider-pill pill-anthropic">Anthropic</span>
-                  </div>
-                  <small>SOTA pemahaman konteks, logika & kode</small>
-                </div>
-                <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
-              </button>
-              <button class="model-item" data-model="GPT-4o">
-                <div class="model-meta">
-                  <div class="model-title-row">
-                    <strong>GPT-4o</strong>
-                    <span class="provider-pill pill-openai">OpenAI</span>
-                  </div>
-                  <small>Flagship serbaguna multi-modal performa tinggi</small>
+                  <small>Respons kilat, penalaran efisien</small>
                 </div>
                 <svg class="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
               </button>
@@ -138,6 +133,10 @@
               </button>
             </div>
           </div>
+          <button class="sync-btn" id="syncBtn" title="Sync / Fetch Data Terkini" aria-label="Sync / Fetch Data">
+            <svg class="sync-icon" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            <span class="sync-label">Sync</span>
+          </button>
         </div>
         <div class="topbar-right">
           <button class="share-btn" id="shareBtn">

@@ -89,10 +89,9 @@
       "cache_ttl_seconds": 3600
     },
     "model_routing": {
-      "fast_tier": "gemini-3.8-flash",
-      "reasoning_tier": "gemini-3.8-pro",
-      "code_tier": "claude-3-5-sonnet",
-      "general_tier": "gpt-4o"
+      "flagship_tier": "claude-opus-5-5",
+      "coding_tier": "claude-sonnet-5-5",
+      "fast_tier": "gemini-3.8-flash"
     }
   }
 }
