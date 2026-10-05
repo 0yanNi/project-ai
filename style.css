@@ -420,6 +420,28 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .input-password-wrap input:focus { border-color: var(--accent); outline: none; }
 .field-hint { font-size: 11px; color: var(--text-3); }
+.key-verify-status {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+.key-verify-status.success {
+  background: rgba(16, 163, 127, .15);
+  border: 1px solid rgba(16, 163, 127, .4);
+  color: #10a37f;
+}
+.key-verify-status.error {
+  background: rgba(239, 68, 68, .15);
+  border: 1px solid rgba(239, 68, 68, .4);
+  color: #ef4444;
+}
+.key-verify-status.loading {
+  background: rgba(90, 169, 255, .15);
+  border: 1px solid rgba(90, 169, 255, .4);
+  color: #5aa9ff;
+}
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .btn-secondary, .btn-primary {
   padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 500;

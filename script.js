@@ -84,7 +84,9 @@
   function updateUsageWidget(deltaTokens = 0) {
     if (typeof state.tokensUsed !== "number") state.tokensUsed = 1480;
     if (deltaTokens > 0) state.tokensUsed += deltaTokens;
-    const maxTokens = 10000;
+    const tierEl = $("#profileTier");
+    const isPro = (state.apiKeys?.gemini && state.apiKeys.gemini.length > 5) || (tierEl && tierEl.textContent.includes("Pro"));
+    const maxTokens = isPro ? 50000 : 10000;
     const pct = Math.min(100, Math.max(5, Math.round((state.tokensUsed / maxTokens) * 100)));
     const percentEl = $("#usagePercent");
     const barEl = $("#usageBarFill");
@@ -172,9 +174,13 @@
   const closeApiModal = $("#closeApiModal");
   const saveApiKeysBtn = $("#saveApiKeys");
   const clearApiKeysBtn = $("#clearApiKeys");
+  const verifyApiKeyBtn = $("#verifyApiKeyBtn");
+  const keyVerifyStatus = $("#keyVerifyStatus");
   const keyGeminiInput = $("#keyGemini");
   const keyClaudeInput = $("#keyClaude");
   const keyOpenAIInput = $("#keyOpenAI");
+  const profileNameEl = $("#profileName");
+  const profileTierEl = $("#profileTier");
 
   if (openApiSettings) {
     openApiSettings.addEventListener("click", (e) => {
@@ -183,6 +189,11 @@
       keyGeminiInput.value = state.apiKeys?.gemini || "";
       keyClaudeInput.value = state.apiKeys?.claude || "";
       keyOpenAIInput.value = state.apiKeys?.openai || "";
+      if (keyVerifyStatus) {
+        keyVerifyStatus.style.display = "none";
+        keyVerifyStatus.className = "key-verify-status";
+        keyVerifyStatus.textContent = "";
+      }
       apiModal.classList.add("open");
     });
   }
@@ -194,6 +205,54 @@
       if (e.target === apiModal) apiModal.classList.remove("open");
     });
   }
+
+  // Live test & verification for Gemini API Key
+  if (verifyApiKeyBtn) {
+    verifyApiKeyBtn.addEventListener("click", async () => {
+      const geminiKey = keyGeminiInput.value.trim();
+      if (!geminiKey) {
+        if (keyVerifyStatus) {
+          keyVerifyStatus.style.display = "block";
+          keyVerifyStatus.className = "key-verify-status error";
+          keyVerifyStatus.textContent = "Silakan masukkan Google Gemini API Key terlebih dahulu untuk diverifikasi.";
+        }
+        return;
+      }
+
+      verifyApiKeyBtn.disabled = true;
+      if (keyVerifyStatus) {
+        keyVerifyStatus.style.display = "block";
+        keyVerifyStatus.className = "key-verify-status loading";
+        keyVerifyStatus.textContent = "Sedang memverifikasi kunci ke Google Gemini API...";
+      }
+
+      try {
+        const resp = await fetch("/api/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: geminiKey })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+          keyVerifyStatus.className = "key-verify-status success";
+          keyVerifyStatus.textContent = `✓ Kunci Terverifikasi! Status Akun: ${data.tier} (${data.availableModelsCount || "Semua"} model aktif).`;
+          if (profileTierEl) profileTierEl.textContent = data.tier;
+          toast("Kunci API valid & terverifikasi");
+        } else {
+          keyVerifyStatus.className = "key-verify-status error";
+          keyVerifyStatus.textContent = `✗ Verifikasi Gagal: ${data.message || data.error || "Kunci API tidak valid"}`;
+          toast("Verifikasi kunci gagal");
+        }
+      } catch (err) {
+        keyVerifyStatus.className = "key-verify-status error";
+        keyVerifyStatus.textContent = `✗ Kesalahan Jaringan: ${err.message}`;
+        toast("Koneksi verifikasi gagal");
+      } finally {
+        verifyApiKeyBtn.disabled = false;
+      }
+    });
+  }
+
   if (saveApiKeysBtn) {
     saveApiKeysBtn.addEventListener("click", () => {
       state.apiKeys = {
@@ -204,8 +263,11 @@
       save();
       apiModal.classList.remove("open");
       toast("Pengaturan kunci API tersimpan");
+      // Immediate live sync after saving
+      syncData();
     });
   }
+
   if (clearApiKeysBtn) {
     clearApiKeysBtn.addEventListener("click", () => {
       keyGeminiInput.value = "";
@@ -213,7 +275,10 @@
       keyOpenAIInput.value = "";
       state.apiKeys = { gemini: "", claude: "", openai: "" };
       save();
+      if (keyVerifyStatus) keyVerifyStatus.style.display = "none";
+      if (profileTierEl) profileTierEl.textContent = "Gratis";
       toast("Kunci API telah dibersihkan");
+      syncData();
     });
   }
 
@@ -226,11 +291,33 @@
     icons.forEach((ic) => ic.classList.add("spinning"));
 
     try {
-      const res = await fetch("/api/chat", { method: "GET" });
+      // Connect to dedicated /api/sync endpoint with active client key
+      const headers = {};
+      if (state.apiKeys?.gemini) {
+        headers["x-gemini-key"] = state.apiKeys.gemini;
+      }
+      const res = await fetch("/api/sync", { method: "GET", headers });
       if (res.ok) {
         const data = await res.json();
-        if (data.usage?.totalTokens) {
-          state.tokensUsed = data.usage.totalTokens;
+        if (data.account) {
+          if (profileTierEl && data.account.tier) {
+            profileTierEl.textContent = data.account.tier;
+          }
+          if (profileNameEl && data.account.name) {
+            profileNameEl.textContent = data.account.name;
+          }
+          if (typeof data.account.quotaUsed === "number") {
+            state.tokensUsed = data.account.quotaUsed;
+          }
+        }
+      } else {
+        // Fallback to /api/chat GET endpoint
+        const fallbackRes = await fetch("/api/chat", { method: "GET" });
+        if (fallbackRes.ok) {
+          const fbData = await fallbackRes.json();
+          if (fbData.hasGeminiApiKey && profileTierEl) {
+            profileTierEl.textContent = "Pro (Active)";
+          }
         }
       }
     } catch (e) {
@@ -948,6 +1035,9 @@
   window.addEventListener("resize", () => {
     if (!isMobile()) app.classList.remove("sidebar-open");
   });
+  if (state.apiKeys?.gemini && profileTierEl) {
+    profileTierEl.textContent = "Pro (Active)";
+  }
   renderHistory();
   renderMessages();
   updateUsageWidget();
