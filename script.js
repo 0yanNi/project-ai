@@ -919,10 +919,8 @@
         } catch (_) {
           errMsg = errText || errMsg;
         }
-        if (res.status === 503 || /503|service unavailable|overloaded|high demand/i.test(errMsg)) {
-          out = `> 🚦 **Layanan Sedang Mengalami Beban Tinggi (HTTP 503 Service Unavailable):**\n` +
-                `> Server Google AI saat ini sedang sibuk karena trafik padat (*high demand*).\n` +
-                `> Silakan tunggu 10–20 detik lalu klik **Regenerate / Coba Lagi** di bawah pesan ini.`;
+        if (res.status === 503 || /503|service unavailable|overloaded|unavailable|high demand/i.test(errMsg)) {
+          out = `> 🚦 **Server AI sedang mengalami lonjakan trafik tinggi, silakan kirim ulang pesan dalam beberapa detik.**`;
         } else {
           out = `> ⚠️ **Gagal Terhubung ke Backend AI (${res.status}):**\n> ${errMsg}\n\n*Pastikan GEMINI_API_KEY telah diatur di Vercel atau menu pengaturan.*`;
         }
@@ -933,9 +931,9 @@
       if (err.name === "AbortError") {
         stopRequested = true;
       } else {
-        const is503 = /503|service unavailable|overloaded|high demand/i.test(err.message || "");
+        const is503 = /503|service unavailable|overloaded|unavailable|high demand/i.test(err.message || "");
         if (is503) {
-          out = `> 🚦 **Server AI Sedang Sibuk (HTTP 503):**\n> Server sedang mengalami beban trafik tinggi (*high demand*). Silakan tunggu sejenak lalu coba lagi.`;
+          out = `> 🚦 **Server AI sedang mengalami lonjakan trafik tinggi, silakan kirim ulang pesan dalam beberapa detik.**`;
         } else {
           out = `> ⚠️ **Kesalahan Koneksi:** Tidak dapat menjangkau server backend (\`/api/chat\`).\n> Detail: *${err.message}*\n\n*Jika menggunakan Vercel, pastikan deployment selesai dan GEMINI_API_KEY telah disetel.*`;
         }

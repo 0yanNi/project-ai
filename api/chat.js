@@ -3,7 +3,10 @@
  * Endpoint: POST /api/chat & GET /api/chat
  * Active Model: gemini-3.8-flash (consistent)
  * Key Source: process.env.GEMINI_API_KEY (with client header fallback)
- * Resilient Error Handling: HTTP 503 (Service Unavailable / Overloaded) & HTTP 429 (Rate Limit)
+ * Resilient Error Handling:
+ *   - Auto-retry with backoff (2-3 attempts, 1-2s delay) on 503 / UNAVAILABLE
+ *   - Fallback models: gemini-3.8-flash -> gemini-3.8-flash-lite -> gemini-2.0-flash-lite -> gemini-2.0-flash
+ *   - User-friendly error: "Server AI sedang mengalami lonjakan trafik tinggi, silakan kirim ulang pesan dalam beberapa detik."
  */
 
 const fs = require("fs");
@@ -41,15 +44,22 @@ try {
   GoogleGenerativeAI = genaiOldPkg.GoogleGenerativeAI;
 } catch (_) {}
 
-// Active Model Configuration
+// Active Model & Fallbacks
 const CONSISTENT_MODEL = "gemini-3.8-flash";
+const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.8-flash-lite",
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash"
+];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Check if an error represents HTTP 503 / Service Unavailable / High Demand / Overloaded
+ * Check if an error represents HTTP 503 or UNAVAILABLE (Service Unavailable / Overloaded)
  */
-function is503Error(err) {
+function is503OrUnavailable(err) {
   if (!err) return false;
   const status = err.status || err.statusCode;
   if (status === 503) return true;
@@ -77,6 +87,7 @@ module.exports = async function handler(req, res) {
       status: "connected",
       activeModel: CONSISTENT_MODEL,
       model: CONSISTENT_MODEL,
+      fallbackModels: FALLBACK_MODELS,
       sdk: GoogleGenAI ? "@google/genai" : GoogleGenerativeAI ? "@google/generative-ai" : "native-gemini-stream",
       hasGeminiApiKey: hasKey,
       vercel: "Connected",
@@ -170,95 +181,43 @@ module.exports = async function handler(req, res) {
   };
 
   try {
-    // 1. Try with @google/genai SDK (with 503 retry and 404 fallback)
+    // 1. Try with @google/genai SDK (with auto-retry on 503/UNAVAILABLE and fallback to lite)
     if (GoogleGenAI) {
       try {
-        await streamWithGoogleGenAISDK({
+        await streamWithAutoRetryAndFallback({
+          streamFn: streamWithGoogleGenAISDK,
           apiKey: geminiApiKey,
-          model: CONSISTENT_MODEL,
           messages,
           attachments,
           searchContext,
-          onChunk: tokenTracker
+          onChunk: tokenTracker,
+          onStatus: statusNotifier
         });
         return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
       } catch (sdkErr) {
-        if (is503Error(sdkErr)) {
-          statusNotifier("Server model sedang sibuk (503). Mencoba ulang...");
-          await sleep(1500);
-          try {
-            await streamWithGoogleGenAISDK({
-              apiKey: geminiApiKey,
-              model: "gemini-2.0-flash",
-              messages,
-              attachments,
-              searchContext,
-              onChunk: tokenTracker
-            });
-            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
-          } catch (_) {}
-        } else if (/404|not found/i.test(sdkErr.message || "")) {
-          try {
-            await streamWithGoogleGenAISDK({
-              apiKey: geminiApiKey,
-              model: "gemini-2.0-flash",
-              messages,
-              attachments,
-              searchContext,
-              onChunk: tokenTracker
-            });
-            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
-          } catch (_) {}
-        }
-        // Fallback to robust REST handler
+        // Fallback to REST handler
       }
     }
 
     // 2. Try with @google/generative-ai SDK
     if (GoogleGenerativeAI) {
       try {
-        await streamWithGenerativeAISDK({
+        await streamWithAutoRetryAndFallback({
+          streamFn: streamWithGenerativeAISDK,
           apiKey: geminiApiKey,
-          model: CONSISTENT_MODEL,
           messages,
           attachments,
           searchContext,
-          onChunk: tokenTracker
+          onChunk: tokenTracker,
+          onStatus: statusNotifier
         });
         return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
       } catch (sdkErr) {
-        if (is503Error(sdkErr)) {
-          statusNotifier("Server model sibuk (503). Mengalihkan kluster...");
-          await sleep(1500);
-          try {
-            await streamWithGenerativeAISDK({
-              apiKey: geminiApiKey,
-              model: "gemini-2.0-flash",
-              messages,
-              attachments,
-              searchContext,
-              onChunk: tokenTracker
-            });
-            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
-          } catch (_) {}
-        } else if (/404|not found/i.test(sdkErr.message || "")) {
-          try {
-            await streamWithGenerativeAISDK({
-              apiKey: geminiApiKey,
-              model: "gemini-2.0-flash",
-              messages,
-              attachments,
-              searchContext,
-              onChunk: tokenTracker
-            });
-            return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
-          } catch (_) {}
-        }
-        // Fallback to robust REST handler
+        // Fallback to REST handler
       }
     }
 
-    // 3. Native Google Gemini REST Streaming with full 503 backoff retries & multi-cluster fallback
+    // 3. Native Google Gemini REST Streaming with full auto-retry (2-3x, 1-2s delay) and model fallback
     await streamWithNativeGeminiREST({
       apiKey: geminiApiKey,
       model: CONSISTENT_MODEL,
@@ -272,20 +231,15 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     console.error("Gemini Backend Error:", err.message);
     const errMsg = err.message || "";
-    const is503 = is503Error(err);
+    const is503 = is503OrUnavailable(err);
     const isRateLimit = err.status === 429 ||
                         err.statusCode === 429 ||
                         /429|resource_exhausted|quota|rate\s*limit|too\s*many\s*requests/i.test(errMsg);
 
     if (is503) {
+      // Exact user-friendly error message as requested
       tokenTracker(
-        `\n\n> 🚦 **Layanan Sedang Mengalami Beban Sangat Tinggi (HTTP 503 Service Unavailable):**\n` +
-        `> Server Google AI saat ini sedang menerima lonjakan trafik (*high demand / model overloaded*).\n` +
-        `> Sistem telah berupaya melakukan percobaan ulang otomatis serta pengalihan kluster, namun kapasitas sementara masih penuh.\n\n` +
-        `> **Saran Tindakan:**\n` +
-        `> 1. Tunggu 10–20 detik agar antrean server mereda.\n` +
-        `> 2. Klik tombol **Coba Lagi (Regenerate)** di bawah bubble chat ini.\n` +
-        `> 3. Jika terus berlanjut, coba gunakan prompt yang lebih singkat.\n`
+        `\n\n> 🚦 **Server AI sedang mengalami lonjakan trafik tinggi, silakan kirim ulang pesan dalam beberapa detik.**\n`
       );
     } else if (isRateLimit) {
       tokenTracker(
@@ -299,6 +253,57 @@ module.exports = async function handler(req, res) {
     return endStream(res, promptText, streamedTokens, CONSISTENT_MODEL);
   }
 };
+
+/**
+ * Executes a streaming function with 2-3 retries (1-2s delay) and model fallbacks on 503 / UNAVAILABLE
+ */
+async function streamWithAutoRetryAndFallback({ streamFn, apiKey, messages, attachments, searchContext, onChunk, onStatus }) {
+  let lastErr = null;
+
+  for (let mIdx = 0; mIdx < FALLBACK_MODELS.length; mIdx++) {
+    const currentModel = FALLBACK_MODELS[mIdx];
+    const maxRetries = 2; // 3 total attempts per model (attempt 0, 1, 2)
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delayMs = 1000 + Math.floor(Math.random() * 500) + (attempt - 1) * 500; // 1000ms - 2000ms
+        if (onStatus) {
+          onStatus(`Server AI sibuk (503/UNAVAILABLE). Mencoba ulang dalam ${Math.round(delayMs / 1000)} detik (percobaan ${attempt + 1}/3)...`);
+        }
+        await sleep(delayMs);
+      } else if (mIdx > 0 && onStatus) {
+        onStatus(`Mengalihkan request ke model alternatif (${currentModel}) karena beban server tinggi...`);
+      }
+
+      try {
+        await streamFn({
+          apiKey,
+          model: currentModel,
+          messages,
+          attachments,
+          searchContext,
+          onChunk
+        });
+        return; // Success!
+      } catch (err) {
+        lastErr = err;
+        if (/404|not found/i.test(err.message || "")) {
+          break; // Model not available, try next fallback model immediately
+        }
+        if (is503OrUnavailable(err)) {
+          if (attempt < maxRetries) {
+            continue; // Retry current model with backoff
+          } else {
+            break; // Retries exhausted on this model, switch to next fallback model
+          }
+        }
+        throw err; // Re-throw other errors (e.g. 400 Bad Request, 429 Rate Limit)
+      }
+    }
+  }
+
+  throw lastErr || new Error("503 UNAVAILABLE: Server AI sedang mengalami lonjakan trafik tinggi");
+}
 
 /**
  * Streaming via @google/genai SDK
@@ -336,28 +341,26 @@ async function streamWithGenerativeAISDK({ apiKey, model, messages, attachments,
 
 /**
  * Native REST Streaming for Google Gemini (official SSE endpoint)
- * Features automatic 503 backoff retries and multi-cluster model fallbacks.
+ * Features auto-retry with 1-2s backoff (2-3 attempts) and fallback models on 503 / UNAVAILABLE
  */
 async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments, searchContext, onChunk, onStatus }) {
   const contents = formatGeminiContents(messages, attachments, searchContext);
-  const modelsToTry = [
-    model || "gemini-3.8-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash"
-  ];
-
   let lastError = null;
 
-  for (let mIdx = 0; mIdx < modelsToTry.length; mIdx++) {
-    const currentModel = modelsToTry[mIdx];
-    const maxRetries = 2; // Up to 3 attempts total per model cluster
+  for (let mIdx = 0; mIdx < FALLBACK_MODELS.length; mIdx++) {
+    const currentModel = FALLBACK_MODELS[mIdx];
+    const maxRetries = 2; // Up to 3 attempts per model cluster
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        if (attempt > 0 && onStatus) {
-          onStatus(`Server AI sedang sibuk (503). Mencoba ulang otomatis (percobaan ${attempt + 1}/${maxRetries + 1})...`);
+        if (attempt > 0) {
+          const delayMs = 1000 + (attempt - 1) * 500 + Math.floor(Math.random() * 300); // 1000ms - 1800ms
+          if (onStatus) {
+            onStatus(`Server AI sibuk (503/UNAVAILABLE). Mencoba ulang otomatis (percobaan ${attempt + 1}/3)...`);
+          }
+          await sleep(delayMs);
         } else if (mIdx > 0 && attempt === 0 && onStatus) {
-          onStatus(`Mengalihkan ke kluster alternatif (${currentModel}) karena beban server tinggi...`);
+          onStatus(`Mengalihkan request ke model alternatif (${currentModel}) karena beban server tinggi...`);
         }
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
@@ -371,21 +374,19 @@ async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments
         if (resp.status === 404) {
           lastError = new Error(`Model ${currentModel} tidak ditemukan.`);
           lastError.status = 404;
-          break; // break retry loop to try next model in modelsToTry
+          break; // break retry loop to try next model in FALLBACK_MODELS
         }
 
-        // 503 Service Unavailable / Model Overloaded / High Demand
+        // 503 Service Unavailable / Model Overloaded / UNAVAILABLE
         if (resp.status === 503) {
           const errText = await resp.text().catch(() => "");
           lastError = new Error(errText || "503 Service Unavailable / Model Overloaded");
           lastError.status = 503;
 
           if (attempt < maxRetries) {
-            // Jittered backoff: ~1.2s, ~2.2s
-            await sleep(1000 * Math.pow(1.5, attempt) + Math.random() * 400);
-            continue; // retry current model
+            continue; // retry current model with 1-2s delay
           } else {
-            // Retries exhausted on this model cluster, break to try next cluster
+            // Retries exhausted on this model, break to switch to next fallback model
             break;
           }
         }
@@ -433,10 +434,9 @@ async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments
         return;
       } catch (err) {
         lastError = err;
-        if (is503Error(err)) {
+        if (is503OrUnavailable(err)) {
           if (attempt < maxRetries) {
-            await sleep(1000 * Math.pow(1.5, attempt) + Math.random() * 400);
-            continue;
+            continue; // retry current model
           }
         } else if (err.status === 404) {
           break; // proceed to next fallback model
@@ -448,8 +448,8 @@ async function streamWithNativeGeminiREST({ apiKey, model, messages, attachments
     }
   }
 
-  // All retries and clusters exhausted
-  throw lastError || new Error("503 Service Unavailable / All model endpoints are currently busy");
+  // All retries and fallback models exhausted
+  throw lastError || new Error("503 UNAVAILABLE: Server AI sedang mengalami lonjakan trafik tinggi");
 }
 
 /**
