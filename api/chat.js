@@ -10,6 +10,28 @@
  *   - Accurate Token Usage & Error Reporting
  */
 
+const fs = require("fs");
+const path = require("path");
+
+// Load .env or .env.local automatically in development / local mode
+(function loadLocalEnv() {
+  for (const envFile of [".env.local", ".env"]) {
+    try {
+      const p = path.resolve(__dirname, "..", envFile);
+      if (fs.existsSync(p)) {
+        const content = fs.readFileSync(p, "utf8");
+        for (const line of content.split("\n")) {
+          const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)?\s*$/);
+          if (m && m[2] && !process.env[m[1]]) {
+            process.env[m[1]] = m[2].replace(/^["']|["']$/g, "").trim();
+          }
+        }
+        break;
+      }
+    } catch (_) {}
+  }
+})();
+
 const MODEL_REGISTRY = {
   "Claude Opus 5.5": {
     provider: "anthropic",
